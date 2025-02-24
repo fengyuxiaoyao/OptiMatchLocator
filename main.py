@@ -1,6 +1,8 @@
 # If we are on colab: this clones the repo and installs the dependencies
-from lightglue import LightGlue, SuperPoint
-from lightglue.utils import load_image, read_image
+# from lightglue import LightGlue, SuperPoint
+from modules.superpoint import SuperPoint
+from modules.lightglue import LightGlue
+from modules.utils import load_image, read_image
 import torch
 import argparse
 import os
@@ -20,12 +22,8 @@ def geo2pixel(geotransform, lon, lat):
     point = ogr.Geometry(ogr.wkbPoint)
     point.AddPoint(lon, lat)
 
-    # coord_transform = osr.CoordinateTransformation(src_srs, osr.SpatialReference(target_srs))
-    # point.Transform(coord_transform)
-
     x = int((point.GetX() - geotransform[0]) / geotransform[1])
-    y = abs(int((geotransform[3] - point.GetY()) / geotransform[5])
-)
+    y = abs(int((geotransform[3] - point.GetY()) / geotransform[5]))
     return x, y
 
 def save_coordinates_to_csv(csv_file, image_name, coord):
@@ -115,6 +113,11 @@ def parse_opt():
     parser.add_argument(
         "--test_num", default=10, type=int, help="the maximum number of test images to be processed"
     )
+    parser.add_argument(
+        "--weights_path",
+        default="/home/c301/Yinpengyu/github/OptiMatchLocator/weights/superpoint_lightglue_v0-1_arxiv.pth",
+        type=str, help="path to weights file"
+    )
     args = parser.parse_args()
     return args
 
@@ -127,8 +130,9 @@ def main():
     images_uav, images_uav_format = list_files(args.image_uav_path)
     # 模型初始化
     max_num_keypoints = args.num_keypoints
-    extractor = SuperPoint(max_num_keypoints=max_num_keypoints).eval().to(device)
-    matcher = LightGlue(features="superpoint").eval().to(device)
+    extractor = SuperPoint(max_num_keypoints=max_num_keypoints,
+                           weight_path=os.path.join(os.path.dirname(__file__), "weights", "superpoint_v1.pth")).eval().to(device)
+    matcher = LightGlue(features=None, weights=args.weights_path).eval().to(device)
 
     # 初始化输出文件夹
     if os.path.exists(args.save_path):
@@ -178,15 +182,8 @@ def main():
         logger.log(f"推理时间: {execution_time_ms} 毫秒, FPS={fps}")
         if matches_num > max_num_keypoints / 15:
             aim = get_center_aim(winy, winx, m_kpts_ste, m_kpts_uav)
-            # aimx, aimy = aim[0] + ox, aim[1] + oy
-            # draw_points_on_image('/media/orin_agx/512G/dataset/2024-03-26_西江数据/XiJiang_DOM.tif',
-            #          (aimx, aimy),
-            #         '/media/orin_agx/512G/LightGlue/output/match/match.jpg' )
             aim_geo = pixel_to_geolocation(aim[0], aim[1], img_ste_geo)
             coord = aim_geo
-            # with open('log_0327.txt', 'a') as log_file:
-            #     log_message = ", ".join(str(item) for item in [uav_mapping[img_uav_id + '.JPG'], round(aim_geo[0], 6), round(aim_geo[1], 6), matches_num])
-            #     log_file.write(log_message + '\n')
             # 将图像名称和对应的地理坐标保存到 CSV 文件
             save_coordinates_to_csv(csv_file, img_uav_id, coord)
 
