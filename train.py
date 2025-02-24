@@ -20,15 +20,31 @@ from torch.cuda.amp import GradScaler, autocast
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
-from . import __module_name__, logger
-from .datasets import get_dataset
-from .eval import run_benchmark
-from .models import get_model
-from .settings import EVAL_PATH, TRAINING_PATH
-from .utils.experiments import get_best_checkpoint, get_last_checkpoint, save_experiment
-from .utils.stdout_capturing import capture_outputs
-from .utils.tensor import batch_to_device
-from .utils.tools import (
+import logging
+
+from utils.experiments import load_experiment  # noqa: F401
+
+formatter = logging.Formatter(
+    fmt="[%(asctime)s %(name)s %(levelname)s] %(message)s", datefmt="%m/%d/%Y %H:%M:%S"
+)
+handler = logging.StreamHandler()
+handler.setFormatter(formatter)
+handler.setLevel(logging.INFO)
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+logger.addHandler(handler)
+logger.propagate = False
+
+__module_name__ = __name__
+from datasets import get_dataset
+from eval import run_benchmark
+from models import get_model
+from settings import EVAL_PATH, TRAINING_PATH
+from utils.experiments import get_best_checkpoint, get_last_checkpoint, save_experiment
+from utils.stdout_capturing import capture_outputs
+from utils.tensor import batch_to_device
+from utils.tools import (
     AverageMetric,
     MedianMetric,
     PRMetric,
