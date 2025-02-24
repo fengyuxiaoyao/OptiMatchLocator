@@ -1,8 +1,8 @@
 # If we are on colab: this clones the repo and installs the dependencies
 # from lightglue import LightGlue, SuperPoint
-from modules.superpoint import SuperPoint
-from modules.lightglue import LightGlue
-from modules.utils import load_image, read_image
+from model.superpoint import SuperPoint
+from model.lightglue import LightGlue
+from model.utils import load_image, read_image
 import torch
 import argparse
 import os
