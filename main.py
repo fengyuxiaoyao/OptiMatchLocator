@@ -16,6 +16,7 @@ from utils.logger import Logger
 import csv
 
 
+
 def geo2pixel(geotransform, lon, lat):
     lon = float(lon)
     lat = float(lat)
@@ -83,25 +84,24 @@ def parse_opt():
     )
     parser.add_argument(
         "--num_keypoints",
-        nargs="+",
         type=int,
         default=1024,
-        help="number of keypoints (list separated by spaces)",
+        help="number of keypoints",
     )
     parser.add_argument(
-        "--image_ste_path", default="/home/c301/Yinpengyu/卫片/太康县/test/clipped.tif", type=str,
+        "--image_ste_path", default="/mnt/d/TestData/clipped.tif", type=str,
         help="path where figure to be paired"
     )
     parser.add_argument(
-        "--image_uav_path", default="/home/c301/Yinpengyu/卫片/太康县/test/patch/", type=str,
+        "--image_uav_path", default="/mnt/d/TestData/patch/", type=str,
         help="path where figure to be paired"
     )
     parser.add_argument(
-        "--save_path", default="/home/c301/Yinpengyu/卫片/太康县/test/output/res_img", type=str,
+        "--save_path", default="/mnt/d/TestData/output/res_img", type=str,
         help="path where figure should be saved"
     )
     parser.add_argument(
-        "--fault_path", default="/home/c301/Yinpengyu/卫片/太康县/test/output/fault_res_img", type=str,
+        "--fault_path", default="/mnt/d/TestData/output/fault_res_img", type=str,
         help="path where fault figure should be saved"
     )
     parser.add_argument(
@@ -115,7 +115,7 @@ def parse_opt():
     )
     parser.add_argument(
         "--weights_path",
-        default="/home/c301/Yinpengyu/github/OptiMatchLocator/weights/superpoint_lightglue_v0-1_arxiv.pth",
+        default="/mnt/d/TestData/weights/superpoint_lightglue_v0-1_arxiv.pth",
         type=str, help="path to weights file"
     )
     args = parser.parse_args()
@@ -123,6 +123,12 @@ def parse_opt():
 
 
 def main():
+    # 初始化输出文件夹
+    try:
+        os.makedirs(args.save_path, exist_ok=True)
+    except OSError as e:
+        print(f"创建保存路径时出错: {e}")
+
     logger = Logger(log_file=os.path.join(args.save_path, 'log.txt'))  # 创建日志工具，指定输出文件
     logger.log(f"Running inference on device:f{device}")
     torch.set_grad_enabled(False)
@@ -133,12 +139,6 @@ def main():
     extractor = SuperPoint(max_num_keypoints=max_num_keypoints,
                            weight_path=os.path.join(os.path.dirname(__file__), "weights", "superpoint_v1.pth")).eval().to(device)
     matcher = LightGlue(features=None, weights=args.weights_path).eval().to(device)
-
-    # 初始化输出文件夹
-    if os.path.exists(args.save_path):
-        pass
-    else:
-        os.makedirs(args.save_path)
 
     if os.path.exists(args.fault_path):
         pass

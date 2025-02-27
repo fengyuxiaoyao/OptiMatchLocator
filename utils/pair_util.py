@@ -1,6 +1,6 @@
 import cv2, torch
-from lightglue.utils import load_image, rbd
-from lightglue import viz2d
+from model.utils import load_image, rbd
+from utils import viz2d
 import matplotlib.pyplot as plt
 import csv
 import numpy as np
