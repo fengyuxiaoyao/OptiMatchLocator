@@ -936,6 +936,36 @@ class CustomSITL:
         print("触发release")
         key = event.name
 
+    def get_global_position(self):
+
+        msg = self.connection.recv_match(
+            type=['SIMSTATE'],
+            blocking=True
+        )
+        REAL_lat = msg.lat / 1e7
+        REAL_lon = msg.lng / 1e7
+        msg = self.connection.recv_match(
+            type=['GLOBAL_POSITION_INT'],
+            blocking=True
+        )
+        SIM_lat = msg.lat / 1e7
+        SIM_lon = msg.lon / 1e7
+        msg = self.connection.recv_match(
+            type=['VFR_HUD'],
+            blocking=True
+        )
+        COMPUTED_alt = msg.alt
+
+        return REAL_lat, REAL_lon, COMPUTED_alt, SIM_lat, SIM_lon
+
+
+    def update_global_position(self, current_lat, current_lon, current_alt):
+        """更新当前位置"""
+        self.send_gps_input(current_lat, current_lon, self.current_alt)
+        self.last_alt = current_alt
+        self.last_lat = current_lat
+        self.last_lon = current_lon
+
     def control_loop(self):
         """主控制循环"""
 
@@ -952,6 +982,11 @@ class CustomSITL:
         # self.set_local_position(1000,1000,-200)
         # self.send_guided_change_heading(1,150,20)
         # self.send_guided_change_heading(1, 90, self.turn_rate)
+        self.connection.mav.rc_channels_override_send(
+            self.connection.target_system,
+            self.connection.target_component,
+            *self.rc_values
+        )
         while self.is_running:
 
             self.connection.mav.rc_channels_override_send(
@@ -976,7 +1011,6 @@ class CustomSITL:
                 self.current_lon = msg.lng
             # 从VFR_HUD获取高度信息，获取的是海拔高度，非相对地面高度，应该是根据气压高程计获取
             elif msg.get_type() == 'VFR_HUD':
-
                 self.current_alt = msg.alt  # 高度
 
                 # self.send_gps_serial(lat, lon, alt)
