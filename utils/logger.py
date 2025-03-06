@@ -7,7 +7,7 @@ class Logger:
 
     def _get_timestamp(self):
         """获取当前的时间戳，格式为 yyyy-mm-dd hh:mm:ss"""
-        return datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        return datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
 
     def log(self, message):
         """打印日志并写入文件（如果提供了 log_file）"""

@@ -111,7 +111,7 @@ def visualize_and_save_matches(image_ste, image_uav, m_kpts_ste, m_kpts_uav, mat
 
 
 def extract_number(filename):
-    return int(filename.split('/')[-1].split('.')[0])
+    return int(filename.split('\\')[-1].split('.')[0])
 
 
 def read_coordinates(file_path):
