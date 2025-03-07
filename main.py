@@ -2,79 +2,17 @@
 # from lightglue import LightGlue, SuperPoint
 from model.superpoint import SuperPoint
 from model.lightglue import LightGlue
-from model.utils import load_image, read_image
 from model.mavlink import CustomSITL
 import torch
 import argparse
 import os
-import numpy as np
-from osgeo import gdal, osr, ogr
 import timeit
-from PIL import Image
-from utils.pair_util import list_files, inference, get_center_aim, pixel_to_geolocation, visualize_and_save_matches, \
-    get_m_nums
+from utils.pair_util import inference, get_center_aim, pixel_to_geolocation, visualize_and_save_matches, \
+    get_m_nums, save_coordinates_to_csv, crop_geotiff_by_center_point
 from utils.logger import Logger
-import csv
 import time
 import keyboard
 
-
-def geo2pixel(geotransform, lon, lat):
-    lon = float(lon)
-    lat = float(lat)
-    point = ogr.Geometry(ogr.wkbPoint)
-    point.AddPoint(lon, lat)
-
-    x = int((point.GetX() - geotransform[0]) / geotransform[1])
-    y = abs(int((geotransform[3] - point.GetY()) / geotransform[5]))
-    return x, y
-
-def save_coordinates_to_csv(csv_file, image_name, coord):
-    """将图像文件名和对应的地理坐标保存到 CSV 文件"""
-    # 如果文件不存在，则创建文件并写入表头
-    file_exists = os.path.exists(csv_file)
-    with open(csv_file, mode='a', newline='') as f:
-        writer = csv.writer(f)
-        if not file_exists:
-            writer.writerow(["Image Name", "Longitude", "Latitude"])  # 表头
-        writer.writerow([image_name, coord[0], coord[1]])  # 写入图像名称和对应的坐标
-
-def crop_geotiff_by_center_point(longitude, latitude, input_tif_path, crop_size_px, crop_size_py):
-
-    # 打开原始图像数据集
-    in_ds = gdal.Open(input_tif_path)
-    if in_ds is None:
-        raise ValueError("无法打开输入的GeoTIFF文件")
-
-    # 获取原数据集的地理参考信息
-    geotransform = in_ds.GetGeoTransform()
-
-    # 将经纬度坐标转换为图像坐标
-    x, y = geo2pixel(geotransform, longitude, latitude)
-
-    # 根据裁剪半径计算实际裁剪矩形框大小（这里简化为正方形裁剪）
-    block_xsize = int(min(crop_size_px, in_ds.RasterXSize - x))
-    block_ysize = int(min(crop_size_py, in_ds.RasterYSize - y))
-
-    # 调整裁剪区域以确保裁剪圆心位于裁剪矩形中心
-    offset_x = int(max(x - block_xsize // 2, 0))
-    offset_y = int(max(y - block_ysize // 2, 0))
-
-    # 从每个波段中读取裁剪区域的数据
-    in_band1 = in_ds.GetRasterBand(1)
-    in_band2 = in_ds.GetRasterBand(2)
-    in_band3 = in_ds.GetRasterBand(3)
-    out_band1 = in_band1.ReadAsArray(offset_x, offset_y, block_xsize, block_ysize)
-    out_band2 = in_band2.ReadAsArray(offset_x, offset_y, block_xsize, block_ysize)
-    out_band3 = in_band3.ReadAsArray(offset_x, offset_y, block_xsize, block_ysize)
-
-    # 设置裁剪后图像的仿射变换参数
-    top_left_x = geotransform[0] + offset_x * geotransform[1]
-    top_left_y = geotransform[3] + offset_y * geotransform[5]
-    dst_transform = (top_left_x, geotransform[1], geotransform[2], top_left_y, geotransform[4], geotransform[5])
-
-    rgb_crop = np.dstack((out_band1, out_band2, out_band3))
-    return rgb_crop, dst_transform, offset_x, offset_y
 
 def parse_opt():
     parser = argparse.ArgumentParser(description="Benchmark script for LightGlue")
