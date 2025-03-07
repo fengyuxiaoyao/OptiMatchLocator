@@ -309,13 +309,14 @@ class CustomSITL:
             1.2,                      # vdop - 垂直精度因子
             self.vn,                       # vn - 北向速度
             self.ve,                       # ve - 东向速度
-            self.vd,                       # vd - 垂直速度
-            1.2,                        # speed_accuracy
-            1.2,                      # horiz_accuracy
-            1.2,                      # vert_accuracy
+            self.vd,                     # vd - 垂直速度
+            3,                        # speed_accuracy
+            3,                      # horiz_accuracy
+            3,                      # vert_accuracy
             8,                        # satellites_visible
             0                         # yaw
         )
+
     def takeoff_without_gps(self):
         """无GPS条件下的固定翼起飞"""
         # 确保在 STABILIZE 模式
@@ -627,9 +628,7 @@ def main():
         fps = 1000 / execution_time_ms
         logger.log(f"裁图时间: {execution_time_ms} 毫秒, FPS={fps}")
         img_ste_pos = [img_ste_geo[0], img_ste_geo[3]]
-        # img_uav_id = os.path.splitext(os.path.split(image_uav)[1])[0]  # 无人机图像的ID  目标图像的ID
         img_uav_id = inx #不从文件夹读取图像命名uav_id，使用迭代次数命名
-        #image_uav = Image.open(image_uav).convert('RGB')
         output_path = os.path.join(args.save_path, f"{img_uav_id}_{img_ste_pos}.tif")#暂时强制改为tif
         fault_path = os.path.join(args.fault_path, f"{img_uav_id}_{img_ste_pos}.tif")
         matches_S_U, matches_num, m_kpts_ste, m_kpts_uav = inference(image_ste, image_uav, extractor, matcher, device)
@@ -652,7 +651,8 @@ def main():
                 aim_geo = pixel_to_geolocation(aim[0], aim[1], img_ste_geo)
                 sitl.current_lat = aim_geo[1]
                 sitl.current_lon = aim_geo[0]
-
+                # sitl.current_lat = real_coord[1]
+                # sitl.current_lon = real_coord[0]
                 # 将图像名称和对应的地理坐标保存到 CSV 文件
                 sitl.queue_csv.put((img_uav_id, aim_geo,coord,real_coord))
                 # save_coordinates_to_csv(csv_file, img_uav_id, coord)
