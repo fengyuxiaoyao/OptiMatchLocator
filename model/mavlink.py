@@ -961,7 +961,7 @@ class CustomSITL:
 
     def update_global_position(self, current_lat, current_lon, current_alt):
         """更新当前位置"""
-        self.send_gps_input(current_lat, current_lon, self.current_alt)
+        self.send_gps_input(current_lat, current_lon, current_alt)
         self.last_alt = current_alt
         self.last_lat = current_lat
         self.last_lon = current_lon
