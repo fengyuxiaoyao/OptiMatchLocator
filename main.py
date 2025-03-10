@@ -126,6 +126,7 @@ def parse_opt():
     )
     parser.add_argument(
         "--num_keypoints",
+
         type=int,
         default=1024,
         help="number of keypoints",

@@ -14,7 +14,6 @@ import os
 
 @dataclass
 class AppConfig:
-    # 修复类型注解
     device: torch.device
     args: argparse.Namespace
     extractor: SuperPoint
@@ -23,17 +22,27 @@ class AppConfig:
     sitl: CustomSITL
 
 class OptMatch:
+    """卫星图像匹配与无人机定位控制系统
 
+    Examples:
+    >>> config = AppConfig(device=..., args=..., extractor=..., matcher=..., logger=..., sitl=...)
+    >>> matcher = OptMatch(config)
+    >>> matcher.run()  # 启动主控制循环
+    """
     def __init__(self, app_config: AppConfig):
         self.config = app_config  # 添加配置存储
 
     def process_image_matching(self, image_ste, real_img):
-        """核心图像匹配处理流程
+        """执行图像匹配推理流程
         Args:
-            image_ste: 卫星基准图像
-            real_img: 无人机实时图像
+            image_ste: 卫星基准图像（numpy数组或Tensor）
+            real_img: 无人机实时拍摄图像（numpy数组或Tensor）
         Returns:
-            tuple: 匹配结果 (matches_S_U, 匹配数量, 关键点集合)
+            tuple: 包含四个元素的元组
+                - matches_S_U: 两图间的特征匹配结果
+                - matches_num: 成功匹配的特征点数量
+                - m_kpts_ste: 卫星图关键点坐标
+                - m_kpts_uav: 无人机图关键点坐标
         """
         start_time = timeit.default_timer()
 
@@ -50,7 +59,19 @@ class OptMatch:
 
 
     def process_image_data(self, config: AppConfig, position_data, win_size: Tuple[int, int], csv_file: str):  # 添加self参数
-        """处理图像数据"""
+        """处理单帧图像定位数据
+        处理流程：
+        1. 解析定位数据（真实坐标/仿真坐标/高度）
+        2. 根据坐标裁剪基准图和实时图
+        3. 执行特征匹配并计算目标坐标
+        4. 根据匹配结果更新飞控或执行边界拓展
+
+        Args:
+            position_data: 包含多维度定位数据的元组
+                (真实纬度, 真实经度, 计算高度, 仿真纬度, 仿真经度)
+            win_size: 实时图图像窗口尺寸 (宽度, 高度)
+            csv_file: 坐标记录文件的保存路径
+        """
         REAL_lat, REAL_lon, COMPUTED_alt, SIM_lat, SIM_lon = position_data
         config.logger.log(f"定位数据: 真实({REAL_lat}, {REAL_lon}), 仿真({SIM_lat}, {SIM_lon}), 高度:{COMPUTED_alt}")
         winx, winy = win_size
