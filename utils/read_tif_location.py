@@ -1,6 +1,23 @@
 from osgeo import gdal, osr
 
 def get_center_geographic_coordinates(file_path):
+    """
+    获取TIFF文件中心点的地理坐标（WGS84经纬度）
+    
+    Args:
+        file_path (str): TIFF文件路径
+        
+    Returns:
+        tuple[float, float]: 包含经度和纬度的元组 (longitude, latitude)
+        
+    Raises:
+        Exception: 当无法打开TIFF文件时抛出
+        
+    Examples:
+    >>> lon, lat = get_center_geographic_coordinates('test.tif')
+    >>> print(f"经度: {lon}, 纬度: {lat}")
+    经度: 120.123456, 纬度: 30.654321
+    """
     # 打开tif文件
     dataset = gdal.Open(file_path)
     if dataset is None:
@@ -35,7 +52,3 @@ def get_center_geographic_coordinates(file_path):
 
     return center_geo_x, center_geo_y
 
-# 使用函数
-file_path = 'D:/TestData/clipped.tif'
-longitude, latitude = get_center_geographic_coordinates(file_path)
-print(f"Center geographic coordinates: Longitude = {longitude}, Latitude = {latitude}")
