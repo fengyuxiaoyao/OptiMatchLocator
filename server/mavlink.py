@@ -1052,35 +1052,3 @@ class CustomSITL:
         )
         # 取消按键监听
         keyboard.unhook_all()
-
-
-if __name__ == "__main__":
-    print("start")
-    sitl = CustomSITL()
-
-    # 启动并连接 SITL
-    # if sitl.start_sitl(1):
-    #     print("SITL 启动成功")
-    # 等待 SITL 完全启动
-    sitl.connect_to_serial()
-    if sitl.connect_to_sitl(0, 0, 1):
-        print("SITL 环境准备就绪")
-        # 等待系统稳定
-    # GPS_TYPE无法实现空中切换，只能在地面切换
-    time.sleep(5)
-    # sitl.wait_for_ekf_ready()
-    sitl.arm_vehicle()
-    # sitl.takeoff(60)
-    sitl.send_guided_change_heading(1, 90, sitl.turn_rate)
-    sitl.takeoff_without_gps()
-
-    # sitl.send_guided_waypoint(sitl.guided_waypoint['lat'],sitl.guided_waypoint['lon'],sitl.guided_waypoint['alt'])
-    sitl.run()
-
-    try:
-        while True:
-            time.sleep(1)
-
-    except KeyboardInterrupt:
-        print("正在停止 SITL...")
-        sitl.stop_sitl()

@@ -311,15 +311,16 @@ def pixel_to_geo(pixel_x, pixel_y, tfw_path):
 
     return geo_x, geo_y
 
-def save_coordinates_to_csv(csv_file, image_name, coord):
+def save_coordinates_to_csv(csv_file, image_name, coord, real_coord, sim_coord):
     """将图像文件名和对应的地理坐标保存到 CSV 文件"""
     # 如果文件不存在，则创建文件并写入表头
     file_exists = os.path.exists(csv_file)
     with open(csv_file, mode='a', newline='') as f:
         writer = csv.writer(f)
         if not file_exists:
-            writer.writerow(["Image Name", "Longitude", "Latitude"])  # 表头
-        writer.writerow([image_name, coord[0], coord[1]])  # 写入图像名称和对应的坐标
+            writer.writerow(["Image Name", "Pre_Longitude", "Pre_Latitude", "Real_Longitude",
+                             "Real_Latitude", "Sim_Longitude", "Sim_Latitude"])  # 表头
+        writer.writerow([image_name, coord[0], coord[1], real_coord[0], real_coord[1], sim_coord[0], sim_coord[1]])  # 写入图像名称和对应的坐标
 
 def crop_geotiff_by_center_point(longitude, latitude, input_tif_path, crop_size_px, crop_size_py):
 
