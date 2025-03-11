@@ -251,8 +251,12 @@ class CustomSITL:
         # 等待模式切换确认，添加超时机制
         start_time = time.time()
         while time.time() - start_time < timeout:
+            while True:
+                m=self.connection.recv_msg()
+                if m is None:
+                    break
             try:
-                msg = self.connection.recv_match(type='HEARTBEAT', blocking=True, timeout=1)
+                msg = self.connection.recv_match(type='HEARTBEAT', blocking=True, timeout=0.2)
                 if msg:
                     current_mode = msg.custom_mode
                     print(f"当前模式: {current_mode}, 目标模式: {mode_map[mode]}")
@@ -269,6 +273,8 @@ class CustomSITL:
                             mode_map[mode],
                             0, 0, 0, 0, 0
                         )
+                else:
+                    print("未收到 HEARTBEAT 消息")
             except Exception as e:
                 print(f"接收消息时出错: {str(e)}")
 
