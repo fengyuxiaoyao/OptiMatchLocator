@@ -15,6 +15,7 @@ import keyboard
 from typing import Tuple
 from dataclasses import dataclass
 from server.optmatch import OptMatch
+import json
 
 
 @dataclass
@@ -56,7 +57,7 @@ def initialize_models(args, device) -> Tuple[SuperPoint, LightGlue]:
 def setup_sitl_connection(logger: Logger) -> CustomSITL:
     """初始化无人机连接"""
     logger.log("Initializing SITL...")
-    sitl = CustomSITL()
+    sitl = CustomSITL(logger)
     sitl.connect_to_serial()
     if sitl.connect_to_sitl(0, 0, 1):
         logger.log("SITL 环境准备就绪")
@@ -66,7 +67,6 @@ def setup_sitl_connection(logger: Logger) -> CustomSITL:
     # sitl.wait_for_ekf_ready()
     sitl.arm_vehicle()
     # sitl.takeoff(60)
-    sitl.send_guided_change_heading(1, 90, sitl.turn_rate)
     sitl.start_thread()
     sitl.takeoff_without_gps()
 
@@ -106,6 +106,7 @@ def main():
 
 def parse_opt():
     parser = argparse.ArgumentParser(description="Benchmark script for LightGlue")
+    parser.add_argument("--config_file", type=str, help="path to a JSON config file")
     parser.add_argument(
         "--device",
         choices=["auto", "cuda", "cpu", "mps"],
@@ -149,6 +150,17 @@ def parse_opt():
         type=str, help="path to weights file"
     )
     args = parser.parse_args()
+    # 如果提供了参数文件，则从文件加载参数
+    if args.config_file and os.path.exists(args.config_file):
+        with open(args.config_file, "r") as f:
+            file_args = json.load(f)  # 读取 JSON 文件
+
+        # 遍历文件中的参数，如果命令行参数未提供，则使用文件参数
+        for key, value in file_args.items():
+            if getattr(args, key, None) is None:
+                setattr(args, key, value)
+
+
     return args
 
 

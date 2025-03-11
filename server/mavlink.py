@@ -12,9 +12,10 @@ from queue import Queue
 
 
 class CustomSITL:
-    def __init__(self):
+    def __init__(self,logger):
         self.connection = None
         self.connect_serial = None
+        self.logger = logger
         self.waypoints1 = [
             {'lat': 39.8900811, 'lon': 114.4266629, 'alt': 50},
             {'lat': 39.8907067, 'lon': 114.4397736, 'alt': 50},
@@ -105,6 +106,15 @@ class CustomSITL:
             print("SITL 已停止")
         if self.connection:
             self.connection.close()
+
+    def SIM_GPS_DISABLE(self,value):
+        self.connection.mav.param_set_send(
+            self.connection.target_system,
+            self.connection.target_component,
+            b'SIM_GPS_DISABLE',
+            value,
+            mavutil.mavlink.MAV_PARAM_TYPE_INT32
+        )
 
     def wait_for_message(self, message_type, timeout, seq=None):
         """等待特定类型的消息，带序号检查"""
@@ -661,7 +671,7 @@ class CustomSITL:
             # 初始化所有通道为中位值
             # 1. 逐步增加油门
             self.rc_values[4] = 0
-            print("正在加速...")
+            self.logger.log(f"开始加速")
             for throttle in range(1200, 1800, 50):  # 从中位值逐步增加到80%油门
                 self.rc_values[2] = throttle  # 通道3是油门
                 self.connection.mav.rc_channels_override_send(
@@ -672,7 +682,7 @@ class CustomSITL:
                 time.sleep(0.1)
 
             # 2. 等待速度建立
-            print("保持速度")
+            self.logger.log(f"保持速度")
             for _ in range(30):  # 保持3秒
                 self.connection.mav.rc_channels_override_send(
                     self.connection.target_system,
@@ -683,9 +693,9 @@ class CustomSITL:
                 time.sleep(0.1)
 
             # 3. 抬升机头
-            print("抬升机头...")
+            self.logger.log(f"抬升机头")
             self.rc_values[1] = 1700  # 通道2上拉（俯仰）
-            for _ in range(300):  # 保持3秒
+            for _ in range(150):  # 保持3秒
                 self.connection.mav.rc_channels_override_send(
                     self.connection.target_system,
                     self.connection.target_component,
@@ -694,7 +704,7 @@ class CustomSITL:
                 time.sleep(0.1)
             # 4. 保持一段时间让飞机爬升
             # 5. 恢复平飞姿态
-            print("调整为平飞...")
+            self.logger.log(f"调整为平飞")
             for _ in range(30):  # 保持3秒
                 self.rc_values[1] = 1500  # 通道2上拉（俯仰）
                 self.connection.mav.rc_channels_override_send(
@@ -704,17 +714,7 @@ class CustomSITL:
                 )
                 time.sleep(0.1)
             # 确保模式稳定
-            print("起飞结束")
-            msg = self.connection.recv_match(
-                type='ATTITUDE',
-                blocking=True
-            )
-            self.current_yaw = msg.yaw * 180 / 3.1415926
-            if self.current_yaw < 0:
-                self.current_yaw += 360
-            else:
-                self.current_yaw = self.current_yaw % 360
-            
+            self.logger.log(f"起飞结束")
             #关闭遥控器模拟信号，必要时会显示飞机失控，模拟飞行过远遥控器信号失联情况
             self.connection.mav.param_set_send(
                 self.connection.target_system,
@@ -726,7 +726,6 @@ class CustomSITL:
             #启动thread维持飞机油门
             thread = threading.Thread(target=self.thorottle_thread)
             thread.daemon = True  # 设为守护线程，主线程结束时子线程也结束
-            
             thread.start()
             return True
 
@@ -844,20 +843,20 @@ class CustomSITL:
         return self.real_lat, self.real_lon, self.current_alt, self.global_position_lat, self.global_position_lon
     def refresh_msg(self,msg_type):
         while True:
-            msg=self.connection.recv_msg()
-            if msg is None:
-                break
-        while True:
+            while True:
+                msg=self.connection.recv_msg()
+                if msg is None:
+                    break
             if msg_type == 'SIMSTATE':
-                self.real_lat=self.connection.msg['SIMSTATE'].lat / 1e7
-                self.real_lon=self.connection.msg['SIMSTATE'].lng / 1e7
+                self.real_lat=self.connection.messages['SIMSTATE'].lat / 1e7
+                self.real_lon=self.connection.messages['SIMSTATE'].lng / 1e7
             elif msg_type == 'GLOBAL_POSITION_INT':
-                self.global_position_lat=self.connection.msg['GLOBAL_POSITION_INT'].lat / 1e7
-                self.global_position_lon=self.connection.msg['GLOBAL_POSITION_INT'].lon / 1e7
+                self.global_position_lat=self.connection.messages['GLOBAL_POSITION_INT'].lat / 1e7
+                self.global_position_lon=self.connection.messages['GLOBAL_POSITION_INT'].lon / 1e7
             elif msg_type == 'VFR_HUD':
-                self.current_alt=self.connection.msg['VFR_HUD'].alt
+                self.current_alt=self.connection.messages['VFR_HUD'].alt
             elif msg_type == 'LOCAL_POSITION_NED':
-                self.vn,self.ve,self.vd=self.connection.msg['LOCAL_POSITION_NED'].vn,self.connection.msg['LOCAL_POSITION_NED'].ve,self.connection.msg['LOCAL_POSITION_NED'].vd
+                self.vn,self.ve,self.vd=self.connection.messages['LOCAL_POSITION_NED'].vx,self.connection.messages['LOCAL_POSITION_NED'].vy,self.connection.messages['LOCAL_POSITION_NED'].vz
     
     def start_thread(self):
         """启动四个子线程，分别监听不同的消息类型"""
@@ -870,14 +869,14 @@ class CustomSITL:
             thread.start()
     
     def thorottle_thread(self):
-        while True:
+        while True:          
             self.connection.mav.rc_channels_override_send(
                 self.connection.target_system,
                 self.connection.target_component,
                 *self.rc_values
             )
             time.sleep(0.1)
-            
+
     def update_global_position(self, current_lat, current_lon, current_alt):
         """更新当前位置"""
         self.send_gps_input(current_lat, current_lon, current_alt)

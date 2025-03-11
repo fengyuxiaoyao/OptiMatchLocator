@@ -139,14 +139,12 @@ class OptMatch:
         # keyboard.on_press(self.config.sitl.key_press_handler)
         # keyboard.on_release(self.config.sitl.key_release_handler)
 
-        # 控制循环
-        while self.config.sitl.is_running:
-            # 更新无人机状态
-            self.config.sitl.connection.mav.rc_channels_override_send(
-                self.config.sitl.connection.target_system,
-                self.config.sitl.connection.target_component,
-                *self.config.sitl.rc_values
-            )
+        # 控制循环，添加一个操作，执行一段时间后，空中自动关闭GPS
+        inx =0
+        while True:
+            inx += 1
+            if inx == 5:
+                self.config.sitl.SIM_GPS_DISABLE(1)
 
             # 获取定位数据
             position_data = self.config.sitl.get_global_position()
