@@ -21,6 +21,8 @@ import threading
 import socket
 import os
 import queue
+import math
+import datetime
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
 class CustomSITL:
@@ -93,55 +95,8 @@ class CustomSITL:
             print(f"System ID: {self.connection.target_system}")
             print(f"Component ID: {self.connection.target_component}")               
 
-            # 设置消息发送间隔，此处设置的为attitude和global_position_int消息的发送间隔为5Hz
-            self.connection.mav.command_long_send(
-                self.connection.target_system, self.connection.target_component,
-                mavutil.mavlink.MAV_CMD_SET_MESSAGE_INTERVAL,
-                0,  # confirmation
-                mavutil.mavlink.MAVLINK_MSG_ID_SIMSTATE,  # param1: message_id
-                1e6 / 10,  # param2: interval in microseconds
-                0,  # param3
-                0,  # param4
-                0,  # param5
-                0,  # param6
-                0  # param7
-            )
-            self.connection.mav.command_long_send(
-                self.connection.target_system, self.connection.target_component,
-                mavutil.mavlink.MAV_CMD_SET_MESSAGE_INTERVAL,
-                0,  # confirmation
-                mavutil.mavlink.MAVLINK_MSG_ID_GLOBAL_POSITION_INT,  # param1: message_id
-                1e6 / 10,  # param2: interval in microseconds
-                0,  # param3
-                0,  # param4
-                0,  # param5
-                0,  # param6
-                0  # param7
-            )
-            self.connection.mav.command_long_send(
-                self.connection.target_system, self.connection.target_component,
-                mavutil.mavlink.MAV_CMD_SET_MESSAGE_INTERVAL,
-                0,  # confirmation
-                mavutil.mavlink.MAVLINK_MSG_ID_LOCAL_POSITION_NED,  # param1: message_id
-                1e6 / 10,  # param2: interval in microseconds
-                0,  # param3
-                0,  # param4
-                0,  # param5
-                0,  # param6
-                0  # param7
-            )
-            self.connection.mav.command_long_send(
-                self.connection.target_system, self.connection.target_component,
-                mavutil.mavlink.MAV_CMD_SET_MESSAGE_INTERVAL,
-                0,  # confirmation
-                mavutil.mavlink.MAVLINK_MSG_ID_VFR_HUD,  # param1: message_id
-                1e6 / 10,  # param2: interval in microseconds
-                0,  # param3
-                0,  # param4
-                0,  # param5
-                0,  # param6
-                0  # param7
-            )
+            # 设置消息发送间隔
+
             return True
         except Exception as e:
             print(f"连接 SITL 失败: {str(e)}")
@@ -271,6 +226,52 @@ class CustomSITL:
                     print("EKF 已收敛")
                     return True
             time.sleep(0.1)
+
+    def calculate_velocity(lat1, lon1, alt1, lat2, lon2, alt2, time_diff):
+        """
+        计算两个经纬度、高程点之间的速度分量（北向 vn、东向 ve、垂直向 vd）。
+        
+        :param lat1: 上一点纬度 (degrees)
+        :param lon1: 上一点经度 (degrees)
+        :param alt1: 上一点高度 (meters)
+        :param lat2: 当前点纬度 (degrees)
+        :param lon2: 当前点经度 (degrees)
+        :param alt2: 当前点高度 (meters)
+        :param time_diff: 时间间隔 (seconds)
+        :return: (vn, ve, vd) - 北向速度, 东向速度, 垂直速度 (m/s)
+        """
+        if time_diff <= 0:
+            return 0, 0, 0  # 避免除零错误
+        
+        # 地球半径（单位：米）
+        R = 6371000  
+        
+        # 转换为弧度制
+        lat1, lon1, lat2, lon2 = map(math.radians, [lat1, lon1, lat2, lon2])
+        
+        # 计算纬度、经度的变化量
+        dlat = lat2 - lat1
+        dlon = lon2 - lon1
+        
+        # Haversine 公式计算两点间的水平距离
+        a = math.sin(dlat / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2) ** 2
+        c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+        distance = R * c  # 地面距离（单位：米）
+        
+        # 计算方位角（航向角）
+        y = math.sin(dlon) * math.cos(lat2)
+        x = math.cos(lat1) * math.sin(lat2) - math.sin(lat1) * math.cos(lat2) * math.cos(dlon)
+        bearing = math.atan2(y, x)  # 方向角（弧度）
+        
+        # 计算速度分量
+        speed = distance / time_diff  # 总水平速度 (m/s)
+        vn = speed * math.cos(bearing)  # 北向速度
+        ve = speed * math.sin(bearing)  # 东向速度
+        
+        # 计算垂直速度
+        vd = (alt2 - alt1) / time_diff  # 高度变化率 (m/s)
+        
+        return vn, ve, vd
     def send_gps_input(self, lat, lon, alt):
         """
         发送GPS位置信息
@@ -280,7 +281,7 @@ class CustomSITL:
         暂时不使用和计算速度信息，位置信息的误差容许值调的较宽泛
         """
         # 记录时间
-
+        current_time = time.time()
         # 计算速度 (如果有上一点数据)
         # if self.last_lat is not None and self.last_lon is not None and self.last_alt is not None and self.last_time is not None:
         #     time_diff = current_time - self.last_time
@@ -291,7 +292,7 @@ class CustomSITL:
         #     )
         # else:
         #     vn, ve, vd = 0, 0, 0  # 无上一点数据，速度设为 0
-        #     self.last_time = current_time
+        # self.last_time = current_time
 
         # 发送 MAVLink GPS_INPUT 消息
         
@@ -398,30 +399,54 @@ class CustomSITL:
                 self.connection.target_component,
                 *self.rc_values
             )
-            time.sleep(0.1)
+            self.send_gps_input(self.real_coord_lat, self.real_coord_lon, self.current_alt)
+            time.sleep(0.2)
 
     def receive_msg(self, msg_type):
+        last_time =datetime.datetime.now()
         while True:
+            # 清空消息队列
             while True:
-        # 尝试非阻塞方式获取任意消息
                 old_msg = self.connection.recv_msg()
                 if old_msg is None:  # 如果没有更多消息可接收
                     break
             msg = self.connection.recv_match(type=msg_type, blocking=True)
+            current_time = datetime.datetime.now()
+            timestamp = current_time.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
             # 根据消息类型分别处理
             if msg_type == 'SIMSTATE':
                 self.real_coord_lat = msg.lat / 1e7
                 self.real_coord_lon = msg.lng / 1e7
 
+                # if self.connection.messages['SIMSTATE'].lat / 1e7 == self.real_coord_lat or self.connection.messages['SIMSTATE'].lng / 1e7 == self.real_coord_lon:
+                #     print(f"[{timestamp}] {msg_type}消息未更新")
+                # self.real_coord_lat = self.connection.messages['SIMSTATE'].lat / 1e7
+                # self.real_coord_lon = self.connection.messages['SIMSTATE'].lng / 1e7       
+
             elif msg_type == 'VFR_HUD':
                 self.current_alt = msg.alt
+
+                # if self.connection.messages['VFR_HUD'].alt == self.current_alt:
+                #     print(f"[{timestamp}] {msg_type}消息未更新")
+                # self.current_alt = self.connection.messages['VFR_HUD'].alt
 
             elif msg_type == 'LOCAL_POSITION_NED':
                 self.vn, self.ve, self.vd = msg.vx, msg.vy, msg.vz
 
+                # if self.connection.messages['LOCAL_POSITION_NED'].vx == self.vn or self.connection.messages['LOCAL_POSITION_NED'].vy == self.ve or self.connection.messages['LOCAL_POSITION_NED'].vz == self.vd:
+                #     print(f"[{timestamp}] {msg_type}消息未更新")
+                # self.vn, self.ve, self.vd = self.connection.messages['LOCAL_POSITION_NED'].vx, self.connection.messages['LOCAL_POSITION_NED'].vy, self.connection.messages['LOCAL_POSITION_NED'].vz
+
             elif msg_type == 'GLOBAL_POSITION_INT':
                 self.coord_lon = msg.lon / 1e7
                 self.coord_lat = msg.lat / 1e7
+                # if self.connection.messages['GLOBAL_POSITION_INT'].lon / 1e7 == self.coord_lon or self.connection.messages['GLOBAL_POSITION_INT'].lat / 1e7 == self.coord_lat:
+                #     print(f"[{timestamp}] {msg_type}消息未更新")
+                # self.coord_lon = self.connection.messages['GLOBAL_POSITION_INT'].lon / 1e7
+                # self.coord_lat = self.connection.messages['GLOBAL_POSITION_INT'].lat / 1e7
+            if (current_time-last_time).total_seconds()>0.3:
+                print(f"[{timestamp}] {msg_type}接收超时,时间间隔：{(current_time-last_time).total_seconds()}秒")
+            last_time = current_time
 
 # 在主程序中启动这些线程
 
@@ -453,7 +478,7 @@ def csv_saver_thread(csv_file,q_csv):
         with open(csv_file, mode = 'a', newline='') as file:
             writer = csv.writer(file)
             image_name, aim, global_pos, simstate = q_csv.get()
-            print(f"收到坐标信息：{image_name}, {aim}, {global_pos}, {simstate}")
+            # print(f"收到坐标信息：{image_name}, {aim}, {global_pos}, {simstate}")
             if not file_exists:
                 writer.writerow(["Image Name", "Aim_Longitude", "Aim_Latitude", "Global Longitude", "Global Latitude", "Sim_Longitude", "Sim_Latitude"])
             writer.writerow([image_name, aim[0], aim[1],global_pos[0],global_pos[1],simstate[0],simstate[1]])
@@ -598,7 +623,7 @@ def main():
     sitl.takeoff_without_gps()
     sender_thread.start()
     while True:
-        logger.log(f"start processing image {inx}")
+        # logger.log(f"start processing image {inx}")
 
         #将接收与更新消息直接写入子线程循环中，快速更新消息，主程序只从class字段中获取信息
 
@@ -610,8 +635,8 @@ def main():
         # winx = image_uav_1.shape[2]
         coord = (sitl.coord_lon, sitl.coord_lat)
         real_coord = (sitl.real_coord_lon, sitl.real_coord_lat)
-        logger.log(f"当前坐标：{coord}")
-        logger.log(f"当前真实坐标：{real_coord}")
+        # logger.log(f"当前坐标：{coord}")
+        # logger.log(f"当前真实坐标：{real_coord}")
         winy = 1000
         winx = 1000
         image_ste, img_ste_geo, ox, oy = crop_geotiff_by_center_point(longitude=coord[0], latitude=coord[1],
@@ -637,7 +662,7 @@ def main():
         execution_time_ms = (end_time_2 - end_time_1) * 1000
         fps = 1000 / execution_time_ms
         logger.log(f"推理时间: {execution_time_ms} 毫秒, FPS={fps}")
-        if inx == 10:
+        if inx == 5:
             sitl.connection.mav.param_set_send(
                 sitl.connection.target_system,
                 sitl.connection.target_component,
@@ -662,7 +687,7 @@ def main():
                 execution_time_ms = (end_time - end_time_2) * 1000
                 fps = 1000 / execution_time_ms
                 logger.log(f"匹配成功：{img_uav_id}.jpg")
-                sitl.send_gps_input(sitl.current_lat, sitl.current_lon, sitl.current_alt)
+                # sitl.send_gps_input(sitl.current_lat, sitl.current_lon, sitl.current_alt)
                 logger.log(f"发送GPS位置信息: lat={sitl.current_lat}, lon={sitl.current_lon}, alt={sitl.current_alt}")
                 # visualize_and_save_matches(image_ste, image_uav, m_kpts_ste, m_kpts_uav, matches_S_U, output_path)
                 inx += 1
