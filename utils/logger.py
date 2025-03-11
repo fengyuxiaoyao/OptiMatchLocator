@@ -22,3 +22,9 @@ class Logger:
             with open(self.log_file, 'a') as f:
                 f.write(log_message + '\n')
 
+    def close(self):
+        """关闭日志文件"""
+        if self.log_file:
+            self.log("日志文件已关闭")
+            self.log_file = None
+
