@@ -13,12 +13,6 @@ from queue import Queue
 
 class CustomSITL:
     def __init__(self):
-        # Mission Planner 安装路径(需要根据实际情况修改)
-
-        self.mp_path = os.path.join(os.path.expanduser("~"), "Documents", "Mission Planner")
-        self.sitl_path = os.path.join(self.mp_path, "sitl")
-        self.ardupilot_path = os.path.join(self.sitl_path, "ArduPlane.exe")
-        self.sitl_process = None
         self.connection = None
         self.connect_serial = None
         self.waypoints1 = [
@@ -29,15 +23,7 @@ class CustomSITL:
             {'lat': 39.8746361, 'lon': 114.4308043, 'alt': 150},
             {'lat': 39.8824414, 'lon': 114.4164276, 'alt': 200},
         ]
-        self.waypoints2 = [
-            {'lat': 39.8989479, 'lon': 114.4443097, 'alt': 50},
-            {'lat': 39.8989479, 'lon': 114.4443097, 'alt': 50},
-            {'lat': 39.8912593, 'lon': 114.4514580, 'alt': 100},
 
-            {'lat': 39.8856009, 'lon': 114.4536119, 'alt': 150},
-            {'lat': 39.8784218, 'lon': 114.4534406, 'alt': 200},
-
-        ]
 
         # 模拟遥控器信号
         self.rc_values = [65535] * 18
@@ -46,59 +32,24 @@ class CustomSITL:
         self.current_yaw = 90  # 存储当前yaw值
         self.last_attitude_msg = None  # 存储最新的姿态消息
         # 控制标志
-        self.is_running = True
-        self.active_controls = set()  # 当前按下的按键集合
 
         self.last_alt = 0  # 存储当前高度
         self.last_lat = 0  # 存储当前纬度
         self.last_lon = 0  # 存储当前经度```````
         # 用last与current计算航向与速度
         self.current_alt = 0  # 存储当前高度
-        self.current_lat = 0  # 存储当前纬度
-        self.current_lon = 0  # 存储当前经度
+        self.real_lat = 0  # 存储simstate真实纬度
+        self.real_lon = 0  # 存储simstate真实经度
+        self.global_position_lat=0 #存储global_position_int中飞控计算纬度
+        self.global_position_lon=0 #存储global_position_int中飞控计算经度
+
+        self.vn, self.ve, self.vd = 0, 0, 0  # 速度信息
         self.message_queue = Queue()
         # GPS环境开关
         self.gps = 0
-        self.gps_time_usec = 0
 
         self.EARTH_RADIUS = 6378137  # 地球半径(米)
         self.last_time = 0
-
-    def start_sitl(self, speedup):
-        """启动 SITL"""
-        # 保持原有的 SITL 参数
-        sitl_params = [
-            self.ardupilot_path,
-            "--model", "plane",
-            # "--home", "34.0663120,114.7568321,100,90",
-            "--home", "-35.363262,149.165237,584,353",
-            "--speedup", str(speedup),
-        ]
-        try:
-            # 创建日志目录
-            log_dir = "sitl_logs"
-            os.makedirs(log_dir, exist_ok=True)
-
-            # 创建带时间戳的日志文件
-            timestamp = time.strftime('%Y%m%d_%H%M%S')
-            log_path = os.path.join(log_dir, f"sitl_{timestamp}.log")
-            log_file = open(log_path, "w", encoding='utf-8', buffering=1)  # buffering=1 使用行缓冲
-
-            # 启动 SITL，不使用 shell=True
-            self.sitl_process = subprocess.Popen(
-                sitl_params,
-                cwd=self.sitl_path,
-                stdout=log_file,
-                stderr=subprocess.STDOUT,  # 将错误输出也重定向到同一个文件
-                text=True  # 使用文本模式
-            )
-
-            # 给 SITL 一些启动时间
-            time.sleep(5)
-            return True
-        except Exception as e:
-            print(f"SITL 启动失败: {str(e)}")
-            return False
 
     def connect_to_sitl(self, ARMING_CHECK, SIM_GPS_DISABLE, GPS_TYPE):
         """连接到 SITL"""
@@ -131,53 +82,12 @@ class CustomSITL:
             #     mavutil.mavlink.MAV_PARAM_TYPE_INT32
             # )
             # 0是开启环境内GPS信号（默认值），1关闭内部GPS模拟信号
-            print("已关闭模拟GPS")
-
-            # self.connection.mav.param_set_send(
-            #     self.connection.target_system,
-            #     self.connection.target_component,
-            #     b'GPS_TYPE',           # 参数名
-            #     GPS_TYPE,                    # 参数值
-            #     mavutil.mavlink.MAV_PARAM_TYPE_INT32
-            # )#默认值是1，mavlink值是14,NMEA是5
-            # 设置EKF不使用GPS信息
-
             print("成功连接到 SITL")
 
             # 确保系统ID和组件ID已正确设置
             print(f"System ID: {self.connection.target_system}")
             print(f"Component ID: {self.connection.target_component}")
-            # for param_name in [b'GPS_TYPE', b'SIM_GPS_DISABLE']:
-            #     msg = self.connection.recv_match(type='PARAM_VALUE', blocking=True, timeout=1)
-            #     if msg is not None:
-            #         print(f"参数 {param_name.decode()} 设置成功: {msg.param_value}")
-            #     else:
-            #         print(f"参数 {param_name.decode()} 设置超时")
 
-            self.connection.mav.command_long_send(
-                self.connection.target_system, self.connection.target_component,
-                mavutil.mavlink.MAV_CMD_SET_MESSAGE_INTERVAL,
-                0,  # confirmation
-                mavutil.mavlink.MAVLINK_MSG_ID_ATTITUDE,  # param1: message_id
-                1e6 / 5,  # param2: interval in microseconds
-                0,  # param3
-                0,  # param4
-                0,  # param5
-                0,  # param6
-                0  # param7
-            )
-            self.connection.mav.command_long_send(
-                self.connection.target_system, self.connection.target_component,
-                mavutil.mavlink.MAV_CMD_SET_MESSAGE_INTERVAL,
-                0,  # confirmation
-                mavutil.mavlink.MAVLINK_MSG_ID_GLOBAL_POSITION_INT,  # param1: message_id
-                1e6 / 5,  # param2: interval in microseconds
-                0,  # param3
-                0,  # param4
-                0,  # param5
-                0,  # param6
-                0  # param7
-            )
             return True
         except Exception as e:
             print(f"连接 SITL 失败: {str(e)}")
@@ -418,6 +328,10 @@ class CustomSITL:
             time.sleep(0.1)
 
     def takeoff(self, alt):
+        """
+        takeoff命令只有在多旋翼无人机上起作用，固定翼无人机需手动使用油门起飞
+        固定翼飞机使用takeoffwithoutGPS起飞
+        """
         self.set_mode("GUIDED")
         self.set_mode("AUTO")
 
@@ -436,15 +350,7 @@ class CustomSITL:
         )
 
         print(f"开始起飞到 {alt} 米")
-        # time.sleep(1)
-        # print(f"开始起飞到 {alt} 米")
-        # self.connection.mav.command_long_send(
-        #     self.connection.target_system,
-        #     self.connection.target_component,
-        #     mavutil.mavlink.MAV_CMD_NAV_TAKEOFF,
-        #     0, 10, 0, 0, 0, 0, 0, alt
-        # )
-        # # 监控高度
+
         start_time = time.time()
         reached_alt = False
         print("等待达到目标高度...")
@@ -516,23 +422,23 @@ class CustomSITL:
         # 记录时间
         current_time = time.time()
 
-        # 计算速度 (如果有上一点数据)
-        if self.last_lat is not None and self.last_lon is not None and self.last_alt is not None and self.last_time is not None:
-            time_diff = current_time - self.last_time
-            vn, ve, vd = self.calculate_velocity(
-                self.last_lat / 1e7, self.last_lon / 1e7, self.last_alt,
-                lat / 1e7, lon / 1e7, alt,
-                time_diff
-            )
-        else:
-            vn, ve, vd = 0, 0, 0  # 无上一点数据，速度设为 0
-            self.last_time = current_time
+        # 计算速度 (如果有上一点数据)。暂时不计算速度信息
+        # if self.last_lat is not None and self.last_lon is not None and self.last_alt is not None and self.last_time is not None:
+        #     time_diff = current_time - self.last_time
+        #     vn, ve, vd = self.calculate_velocity(
+        #         self.last_lat / 1e7, self.last_lon / 1e7, self.last_alt,
+        #         lat / 1e7, lon / 1e7, alt,
+        #         time_diff
+        #     )
+        # else:
+        #     vn, ve, vd = 0, 0, 0  # 无上一点数据，速度设为 0
+        #     self.last_time = current_time
 
         # 发送 MAVLink GPS_INPUT 消息
         self.connection.mav.gps_input_send(
             int(current_time * 1e6),  # 时间戳（微秒）
             1,  # gps_id
-            0b00111000,  # ignore_flags (仅忽略 VD 速度)
+            0b00000000,  # ignore_flags (仅忽略 VD 速度)
             0,  # time_week_ms
             0,  # time_week
             3,  # fix_type (3D fix)
@@ -541,10 +447,10 @@ class CustomSITL:
             alt,  # alt - 高度(米)
             2.0,  # hdop - 水平精度因子
             2.0,  # vdop - 垂直精度因子
-            0,  # vn - 北向速度
-            0,  # ve - 东向速度
-            0,  # vd - 垂直速度
-            0,  # speed_accuracy
+            self.vn,  # vn - 北向速度
+            self.ve,  # ve - 东向速度
+            self.vd,  # vd - 垂直速度
+            3.0,  # speed_accuracy
             3.0,  # horiz_accuracy
             3.0,  # vert_accuracy
             8,  # satellites_visible
@@ -553,7 +459,7 @@ class CustomSITL:
 
     def send_gps_serial(self, lat, lon, alt):
         """
-        发送GPS位置信息
+        模拟nmea串口字符串发送GPS位置信息
         lat: 纬度(度)
         lon: 经度(度)
         alt: 高度(米,相对地面)
@@ -687,6 +593,7 @@ class CustomSITL:
     def send_guided_waypoint(self, lat, lon, alt_relative):
         """
         指定一个全球坐标点，让固定翼飞机在GUIDED模式下飞向该点
+        单点目标飞行，与mission航线任务飞行对应
 
         参数:
         lat: 纬度
@@ -766,7 +673,7 @@ class CustomSITL:
 
             # 2. 等待速度建立
             print("保持速度")
-            for _ in range(60):  # 保持3秒
+            for _ in range(30):  # 保持3秒
                 self.connection.mav.rc_channels_override_send(
                     self.connection.target_system,
                     self.connection.target_component,
@@ -799,24 +706,16 @@ class CustomSITL:
             # 确保模式稳定
             print("起飞结束")
             msg = self.connection.recv_match(
-                type=['ATTITUDE', 'GLOBAL_POSITION_INT'],
+                type='ATTITUDE',
                 blocking=True
             )
-            if msg.get_type() == 'ATTITUDE':
-                self.current_yaw = msg.yaw * 180 / 3.1415926
-                if self.current_yaw < 0:
-                    self.current_yaw += 360
-                else:
-                    self.current_yaw = self.current_yaw % 360
-
-            # 起飞成功后关闭模拟GPS
-            # self.connection.mav.param_set_send(
-            #     self.connection.target_system,
-            #     self.connection.target_component,
-            #     b'SIM_GPS_DISABLE',
-            #     1,
-            #     mavutil.mavlink.MAV_PARAM_TYPE_INT32
-            # )
+            self.current_yaw = msg.yaw * 180 / 3.1415926
+            if self.current_yaw < 0:
+                self.current_yaw += 360
+            else:
+                self.current_yaw = self.current_yaw % 360
+            
+            #关闭遥控器模拟信号，必要时会显示飞机失控，模拟飞行过远遥控器信号失联情况
             self.connection.mav.param_set_send(
                 self.connection.target_system,
                 self.connection.target_component,
@@ -824,6 +723,11 @@ class CustomSITL:
                 1,
                 mavutil.mavlink.MAV_PARAM_TYPE_INT32
             )
+            #启动thread维持飞机油门
+            thread = threading.Thread(target=self.thorottle_thread)
+            thread.daemon = True  # 设为守护线程，主线程结束时子线程也结束
+            
+            thread.start()
             return True
 
         except Exception as e:
@@ -937,28 +841,43 @@ class CustomSITL:
         key = event.name
 
     def get_global_position(self):
+        return self.real_lat, self.real_lon, self.current_alt, self.global_position_lat, self.global_position_lon
+    def refresh_msg(self,msg_type):
+        while True:
+            msg=self.connection.recv_msg()
+            if msg is None:
+                break
+        while True:
+            if msg_type == 'SIMSTATE':
+                self.real_lat=self.connection.msg['SIMSTATE'].lat / 1e7
+                self.real_lon=self.connection.msg['SIMSTATE'].lng / 1e7
+            elif msg_type == 'GLOBAL_POSITION_INT':
+                self.global_position_lat=self.connection.msg['GLOBAL_POSITION_INT'].lat / 1e7
+                self.global_position_lon=self.connection.msg['GLOBAL_POSITION_INT'].lon / 1e7
+            elif msg_type == 'VFR_HUD':
+                self.current_alt=self.connection.msg['VFR_HUD'].alt
+            elif msg_type == 'LOCAL_POSITION_NED':
+                self.vn,self.ve,self.vd=self.connection.msg['LOCAL_POSITION_NED'].vn,self.connection.msg['LOCAL_POSITION_NED'].ve,self.connection.msg['LOCAL_POSITION_NED'].vd
+    
+    def start_thread(self):
+        """启动四个子线程，分别监听不同的消息类型"""
+        msg_types = ['SIMSTATE', 'GLOBAL_POSITION_INT', 'VFR_HUD', 'LOCAL_POSITION_NED']
 
-        msg = self.connection.recv_match(
-            type=['SIMSTATE'],
-            blocking=True
-        )
-        REAL_lat = msg.lat / 1e7
-        REAL_lon = msg.lng / 1e7
-        msg = self.connection.recv_match(
-            type=['GLOBAL_POSITION_INT'],
-            blocking=True
-        )
-        SIM_lat = msg.lat / 1e7
-        SIM_lon = msg.lon / 1e7
-        msg = self.connection.recv_match(
-            type=['VFR_HUD'],
-            blocking=True
-        )
-        COMPUTED_alt = msg.alt
-
-        return REAL_lat, REAL_lon, COMPUTED_alt, SIM_lat, SIM_lon
-
-
+        for msg_type in msg_types:
+            thread = threading.Thread(target=self.refresh_msg, args=(msg_type,))
+            thread.daemon = True  # 设为守护线程，主线程结束时子线程也结束
+            
+            thread.start()
+    
+    def thorottle_thread(self):
+        while True:
+            self.connection.mav.rc_channels_override_send(
+                self.connection.target_system,
+                self.connection.target_component,
+                *self.rc_values
+            )
+            time.sleep(0.1)
+            
     def update_global_position(self, current_lat, current_lon, current_alt):
         """更新当前位置"""
         self.send_gps_input(current_lat, current_lon, current_alt)
@@ -966,89 +885,82 @@ class CustomSITL:
         self.last_lat = current_lat
         self.last_lon = current_lon
 
-    def control_loop(self):
-        """主控制循环"""
+    # def control_loop(self):
+    #     """主控制循环"""
 
-        self.rc_values[2] = 1700
-        # self.connection.mav.param_set_send(
-        #         self.connection.target_system,
-        #         self.connection.target_component,
-        #         b'SIM_GPS_DISABLE',           # 参数名
-        #         0,                    # 参数值
-        #         mavutil.mavlink.MAV_PARAM_TYPE_INT32
-        #     )#默认值是1，mavlink值是14
+    #     self.rc_values[2] = 1700
 
-        print("开始控制循环...")
-        # self.set_local_position(1000,1000,-200)
-        # self.send_guided_change_heading(1,150,20)
-        # self.send_guided_change_heading(1, 90, self.turn_rate)
-        self.connection.mav.rc_channels_override_send(
-            self.connection.target_system,
-            self.connection.target_component,
-            *self.rc_values
-        )
-        while self.is_running:
+    #     print("开始控制循环...")
+    #     # self.set_local_position(1000,1000,-200)
+    #     # self.send_guided_change_heading(1,150,20)
+    #     # self.send_guided_change_heading(1, 90, self.turn_rate)
+    #     self.connection.mav.rc_channels_override_send(
+    #         self.connection.target_system,
+    #         self.connection.target_component,
+    #         *self.rc_values
+    #     )
+    #     while self.is_running:
 
-            self.connection.mav.rc_channels_override_send(
-                self.connection.target_system,
-                self.connection.target_component,
-                *self.rc_values
-            )
-            msg = self.connection.recv_match(
-                type=['SIMSTATE', 'VFR_HUD', 'GPS_RAW_INT'],
-                blocking=True
-            )
-            # 角度信息暂时不用
-            # if msg.get_type() == 'ATTITUDE':
-            #     self.current_yaw = msg.yaw*180/3.1415926
-            #     if self.current_yaw < 0:
-            #         self.current_yaw += 360
-            #     else :
-            #         self.current_yaw = self.current_yaw % 360
-            # 从SIMSTATE获取位置信息
-            if msg.get_type() == 'SIMSTATE':
-                self.current_lat = msg.lat
-                self.current_lon = msg.lng
-            # 从VFR_HUD获取高度信息，获取的是海拔高度，非相对地面高度，应该是根据气压高程计获取
-            elif msg.get_type() == 'VFR_HUD':
-                self.current_alt = msg.alt  # 高度
+    #         self.connection.mav.rc_channels_override_send(
+    #             self.connection.target_system,
+    #             self.connection.target_component,
+    #             *self.rc_values
+    #         )
+    #         msg = self.connection.recv_match(
+    #             type=['SIMSTATE', 'VFR_HUD', 'GPS_RAW_INT'],
+    #             blocking=True
+    #         )
+    #         # 角度信息暂时不用
+    #         # if msg.get_type() == 'ATTITUDE':
+    #         #     self.current_yaw = msg.yaw*180/3.1415926
+    #         #     if self.current_yaw < 0:
+    #         #         self.current_yaw += 360
+    #         #     else :
+    #         #         self.current_yaw = self.current_yaw % 360
+    #         # 从SIMSTATE获取位置信息
+    #         if msg.get_type() == 'SIMSTATE':
+    #             self.current_lat = msg.lat
+    #             self.current_lon = msg.lng
+    #         # 从VFR_HUD获取高度信息，获取的是海拔高度，非相对地面高度，应该是根据气压高程计获取
+    #         elif msg.get_type() == 'VFR_HUD':
+    #             self.current_alt = msg.alt  # 高度
 
-                # self.send_gps_serial(lat, lon, alt)
-            # 用mavlink消息发送经纬度与高程信息给飞控，暂时未解算并发送速度信息
-            self.send_gps_input(self.current_lat, self.current_lon, self.current_alt)
-            self.last_alt = self.current_alt
-            self.last_lat = self.current_lat
-            self.last_lon = self.current_lon
-            time.sleep(0.05)  # 20Hz 控制频率
+    #             # self.send_gps_serial(lat, lon, alt)
+    #         # 用mavlink消息发送经纬度与高程信息给飞控，暂时未解算并发送速度信息
+    #         self.send_gps_input(self.current_lat, self.current_lon, self.current_alt)
+    #         self.last_alt = self.current_alt
+    #         self.last_lat = self.current_lat
+    #         self.last_lon = self.current_lon
+    #         time.sleep(0.05)  # 20Hz 控制频率
 
-    def run(self):
-        """启动控制器"""
-        try:
-            # 注册按键事件处理器
-            keyboard.on_press(self.key_press_handler)
-            keyboard.on_release(self.key_release_handler)
+    # def run(self):
+    #     """启动控制器"""
+    #     try:
+    #         # 注册按键事件处理器
+    #         keyboard.on_press(self.key_press_handler)
+    #         keyboard.on_release(self.key_release_handler)
 
-            # 启动控制循环
-            print("开始监听按键控制...")
-            print("使用 WSAD 控制姿态，方向键控制油门和偏航")
-            print("空格键：除油门外所有通道回中")
-            print("按 ESC 退出")
-            self.control_loop()
+    #         # 启动控制循环
+    #         print("开始监听按键控制...")
+    #         print("使用 WSAD 控制姿态，方向键控制油门和偏航")
+    #         print("空格键：除油门外所有通道回中")
+    #         print("按 ESC 退出")
+    #         self.control_loop()
 
-        except KeyboardInterrupt:
-            print("\n程序已终止")
-        finally:
-            self.cleanup()
+    #     except KeyboardInterrupt:
+    #         print("\n程序已终止")
+    #     finally:
+    #         self.cleanup()
 
-    def cleanup(self):
-        """清理资源"""
-        self.is_running = False
-        # 恢复所有通道到中位
-        self.rc_values[:4] = [1500] * 4
-        self.connection.mav.rc_channels_override_send(
-            self.connection.target_system,
-            self.connection.target_component,
-            *self.rc_values
-        )
-        # 取消按键监听
-        keyboard.unhook_all()
+    # def cleanup(self):
+    #     """清理资源"""
+    #     self.is_running = False
+    #     # 恢复所有通道到中位
+    #     self.rc_values[:4] = [1500] * 4
+    #     self.connection.mav.rc_channels_override_send(
+    #         self.connection.target_system,
+    #         self.connection.target_component,
+    #         *self.rc_values
+    #     )
+    #     # 取消按键监听
+    #     keyboard.unhook_all()

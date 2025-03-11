@@ -67,24 +67,12 @@ def setup_sitl_connection(logger: Logger) -> CustomSITL:
     sitl.arm_vehicle()
     # sitl.takeoff(60)
     sitl.send_guided_change_heading(1, 90, sitl.turn_rate)
+    sitl.start_thread()
     sitl.takeoff_without_gps()
 
-    # 注册按键事件处理器
-    keyboard.on_press(sitl.key_press_handler)
-    keyboard.on_release(sitl.key_release_handler)
-
-    # 启动控制循环
-    print("开始监听按键控制...")
-    print("使用 WSAD 控制姿态，方向键控制油门和偏航")
-    print("空格键：除油门外所有通道回中")
-    print("按 ESC 退出")
-    print("开始控制循环...")
-    sitl.rc_values[2] = 1700
-    sitl.connection.mav.rc_channels_override_send(
-        sitl.connection.target_system,
-        sitl.connection.target_component,
-        *sitl.rc_values
-    )
+    # 由于不使用舵机控制飞行，可暂时不使用键盘按键功能，避免操作误触
+    # keyboard.on_press(sitl.key_press_handler)
+    # keyboard.on_release(sitl.key_release_handler)
     return sitl
 
 def main():

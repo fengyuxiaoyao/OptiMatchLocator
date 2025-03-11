@@ -135,9 +135,9 @@ class OptMatch:
         win_size = (1024, 1024)
         csv_file = os.path.join(self.config.args.save_path, 'image_coordinates.csv')  # 使用实例配置
 
-        # 注册输入监听
-        keyboard.on_press(self.config.sitl.key_press_handler)
-        keyboard.on_release(self.config.sitl.key_release_handler)
+        # 由于不用舵机控制，可不使用键盘监听控制，避免误触
+        # keyboard.on_press(self.config.sitl.key_press_handler)
+        # keyboard.on_release(self.config.sitl.key_release_handler)
 
         # 控制循环
         while self.config.sitl.is_running:
