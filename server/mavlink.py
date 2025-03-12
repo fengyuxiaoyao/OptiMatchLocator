@@ -850,32 +850,31 @@ class CustomSITL:
     def get_global_position(self):
         return self.real_lat, self.real_lon, self.current_alt, self.global_position_lat, self.global_position_lon
     
-    def refresh_msg(self,msg_type):
+    def refresh_msg(self):
         while True:
             while True:
                 msg=self.connection.recv_msg()
                 if msg is None:
                     break
-            if msg_type == 'SIMSTATE':
-                self.real_lat=self.connection.messages['SIMSTATE'].lat / 1e7
-                self.real_lon=self.connection.messages['SIMSTATE'].lng / 1e7
-            elif msg_type == 'GLOBAL_POSITION_INT':
-                self.global_position_lat=self.connection.messages['GLOBAL_POSITION_INT'].lat / 1e7
-                self.global_position_lon=self.connection.messages['GLOBAL_POSITION_INT'].lon / 1e7
-            elif msg_type == 'VFR_HUD':
-                self.current_alt=self.connection.messages['VFR_HUD'].alt
-            elif msg_type == 'LOCAL_POSITION_NED':
-                self.vn,self.ve,self.vd=self.connection.messages['LOCAL_POSITION_NED'].vx,self.connection.messages['LOCAL_POSITION_NED'].vy,self.connection.messages['LOCAL_POSITION_NED'].vz
+            # if msg_type == 'SIMSTATE':
+            self.real_lat=self.connection.messages['SIMSTATE'].lat / 1e7
+            self.real_lon=self.connection.messages['SIMSTATE'].lng / 1e7
+            # elif msg_type == 'GLOBAL_POSITION_INT':
+            self.global_position_lat=self.connection.messages['GLOBAL_POSITION_INT'].lat / 1e7
+            self.global_position_lon=self.connection.messages['GLOBAL_POSITION_INT'].lon / 1e7
+            # elif msg_type == 'VFR_HUD':
+            self.current_alt=self.connection.messages['VFR_HUD'].alt
+            # elif msg_type == 'LOCAL_POSITION_NED':
+            self.vn,self.ve,self.vd=self.connection.messages['LOCAL_POSITION_NED'].vx,self.connection.messages['LOCAL_POSITION_NED'].vy,self.connection.messages['LOCAL_POSITION_NED'].vz
     
     def start_thread(self):
-        """启动四个子线程，分别监听不同的消息类型"""
-        msg_types = ['SIMSTATE', 'GLOBAL_POSITION_INT', 'VFR_HUD', 'LOCAL_POSITION_NED']
+        # msg_types = ['SIMSTATE', 'GLOBAL_POSITION_INT', 'VFR_HUD', 'LOCAL_POSITION_NED']
 
-        for msg_type in msg_types:
-            thread = threading.Thread(target=self.refresh_msg, args=(msg_type,))
-            thread.daemon = True  # 设为守护线程，主线程结束时子线程也结束
+        # for msg_type in msg_types:
+        thread = threading.Thread(target=self.refresh_msg)
+        thread.daemon = True  # 设为守护线程，主线程结束时子线程也结束
             
-            thread.start()
+        thread.start()
     
     def thorottle_thread(self):
         while True:          
