@@ -256,7 +256,8 @@ class CustomSITL:
                 if m is None:
                     break
             try:
-                msg = self.connection.recv_match(type='HEARTBEAT', blocking=True, timeout=0.2)
+                # msg = self.connection.recv_match(type='HEARTBEAT', blocking=True, timeout=1)
+                msg=self.connection.messages['HEARTBEAT']
                 if msg:
                     current_mode = msg.custom_mode
                     print(f"当前模式: {current_mode}, 目标模式: {mode_map[mode]}")
@@ -273,6 +274,7 @@ class CustomSITL:
                             mode_map[mode],
                             0, 0, 0, 0, 0
                         )
+                        time.sleep(0.5)
                 else:
                     print("未收到 HEARTBEAT 消息")
             except Exception as e:
@@ -847,6 +849,7 @@ class CustomSITL:
 
     def get_global_position(self):
         return self.real_lat, self.real_lon, self.current_alt, self.global_position_lat, self.global_position_lon
+    
     def refresh_msg(self,msg_type):
         while True:
             while True:
